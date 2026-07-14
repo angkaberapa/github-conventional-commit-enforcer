@@ -15,14 +15,14 @@ DEFAULT_TYPES = [
 ]
 
 DEFAULT_CONFIG = {
-    "types": DEFAULT_TYPES,
-    "scopes": [],
+    "allowed_types": DEFAULT_TYPES,
+    "allowed_scopes": [],
     "scope_required": False,
-    "breaking_allowed": True,
+    "allow_breaking": True,
     "min_description_length": 1,
 }
 
-CONFIG_FILENAME = ".commit-msg.json"
+CONFIG_FILENAME = ".commit-enforcer.json"
 
 COMMIT_PATTERN = re.compile(r"^(\w+)(\([\w.\-/ ]+\))?(!)?: (.+)$", re.UNICODE)
 
@@ -70,7 +70,7 @@ def validate(message: str, config: dict) -> str | None:
     bang = match.group(3)
     description = match.group(4)
 
-    allowed_types = config.get("types", DEFAULT_TYPES)
+    allowed_types = config.get("allowed_types", DEFAULT_TYPES)
     if commit_type not in allowed_types:
         return f"type '{commit_type}' is not allowed"
 
@@ -79,11 +79,11 @@ def validate(message: str, config: dict) -> str | None:
     if config.get("scope_required", False) and not scope_str:
         return "scope is required but missing"
 
-    allowed_scopes = config.get("scopes", [])
+    allowed_scopes = config.get("allowed_scopes", [])
     if allowed_scopes and scope_str and scope_str not in allowed_scopes:
         return f"scope '{scope_str}' is not allowed"
 
-    if bang and not config.get("breaking_allowed", True):
+    if bang and not config.get("allow_breaking", True):
         return "breaking change marker '!' is not allowed"
 
     min_desc = config.get("min_description_length", 1)
@@ -109,10 +109,10 @@ def format_error(detail: str, config: dict) -> str:
         "  feat(api)!: remove legacy endpoint",
         "  feat!: change public API",
         "",
-        "Allowed types: " + ", ".join(config.get("types", DEFAULT_TYPES)),
+        "Allowed types: " + ", ".join(config.get("allowed_types", DEFAULT_TYPES)),
     ]
 
-    scopes = config.get("scopes", [])
+    scopes = config.get("allowed_scopes", [])
     if scopes:
         lines.append("Allowed scopes: " + ", ".join(scopes))
 
@@ -121,7 +121,7 @@ def format_error(detail: str, config: dict) -> str:
     else:
         lines.append("Scope is optional.")
 
-    if config.get("breaking_allowed", True):
+    if config.get("allow_breaking", True):
         lines.append("Breaking changes (marker '!') are allowed.")
     else:
         lines.append("Breaking changes (marker '!') are NOT allowed.")
@@ -139,7 +139,7 @@ def main() -> int:
     parser.add_argument(
         "--config",
         default=None,
-        help="Path to config file (default: look for .commit-msg.json in repo root)",
+        help="Path to config file (default: look for .commit-enforcer.json in repo root)",
     )
     args = parser.parse_args()
 
