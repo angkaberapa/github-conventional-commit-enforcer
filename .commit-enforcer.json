@@ -1,7 +1,0 @@
-{
-  "allowed_types": ["feat", "fix", "docs", "refactor", "test", "chore", "ci", "build", "perf", "revert"],
-  "allowed_scopes": ["api", "auth", "db", "email", "worker", "infra"],
-  "scope_required": true,
-  "allow_breaking": true,
-  "min_description_length": 3
-}
