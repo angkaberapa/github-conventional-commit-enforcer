@@ -9,7 +9,6 @@ TMP_CONFIG=".commit-enforcer.json"
 
 cleanup() {
     git reset --soft HEAD~"$1" 2>/dev/null || true
-    rm -f "$TMP_CONFIG"
 }
 
 ok()   { PASS=$((PASS + 1)); echo "  PASS: $1"; }
@@ -20,6 +19,9 @@ echo ""
 
 # --- default config ---
 echo "--- Defaults (no config file) ---"
+
+# Temporarily remove repo config so defaults are used
+git mv "$TMP_CONFIG" /tmp/enforcer_config_backup.json 2>/dev/null || true
 
 if git commit --allow-empty -m "feat: valid default" 2>/dev/null; then
     ok "valid commit passes"
@@ -34,6 +36,7 @@ else
 fi
 
 cleanup 1
+git mv /tmp/enforcer_config_backup.json "$TMP_CONFIG" 2>/dev/null || true
 
 # --- custom config ---
 echo ""
@@ -141,8 +144,5 @@ echo ""
 echo "=============================="
 echo "Results: $PASS passed, $FAIL failed"
 echo "=============================="
-
-# Restore initial state
-git reset --hard HEAD 2>/dev/null
 
 exit $FAIL
