@@ -18,12 +18,9 @@ echo "=== Integration test suite ==="
 echo ""
 
 # --- default config ---
-echo "--- Defaults (no config file) ---"
+echo "--- With repo .commit-enforcer.json ---"
 
-# Temporarily remove repo config so defaults are used
-git mv "$TMP_CONFIG" /tmp/enforcer_config_backup.json 2>/dev/null || true
-
-if git commit --allow-empty -m "feat: valid default" 2>/dev/null; then
+if git commit --allow-empty -m "feat(api): valid commit" 2>/dev/null; then
     ok "valid commit passes"
 else
     fail "valid commit should pass"
@@ -36,11 +33,10 @@ else
 fi
 
 cleanup 1
-git mv /tmp/enforcer_config_backup.json "$TMP_CONFIG" 2>/dev/null || true
 
 # --- custom config ---
 echo ""
-echo "--- Custom .commit-enforcer.json ---"
+echo "--- Override with custom .commit-enforcer.json ---"
 
 cat > "$TMP_CONFIG" <<'EOF'
 {
