@@ -3,6 +3,7 @@ repos:
     hooks:
       - id: validate-commit-msg
         name: Validate conventional commit message
-        entry: python3 scripts/validate_commit_msg.py
-        language: system
+        entry: validate-commit-msg
+        language: python
         stages: [commit-msg]
+        additional_dependencies: [PyYAML]

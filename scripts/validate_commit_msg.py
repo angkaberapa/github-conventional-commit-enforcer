@@ -22,21 +22,94 @@ DEFAULT_CONFIG = {
     "min_description_length": 1,
 }
 
-CONFIG_FILENAME = ".commit-enforcer.json"
+CONFIG_FILENAMES = [".commit-enforcer.json", ".commit-enforcer.yaml", ".commit-enforcer.yml"]
 
 COMMIT_PATTERN = re.compile(r"^(\w+)(\([\w.\-/ ]+\))?(!)?: (.+)$", re.UNICODE)
 
 AUTO_PREFIXES = ("merge ", "revert ", "fixup! ", "squash! ")
 
+try:
+    import yaml as _yaml
+    HAS_YAML = True
+except ImportError:
+    HAS_YAML = False
+
+
+def validate_config_schema(config: dict) -> None:
+    errors = []
+
+    expected = [
+        ("allowed_types", list),
+        ("allowed_scopes", list),
+        ("scope_required", bool),
+        ("allow_breaking", bool),
+        ("min_description_length", int),
+    ]
+
+    for key, expected_type in expected:
+        if key in config:
+            val = config[key]
+            if not isinstance(val, expected_type):
+                errors.append(
+                    f"config key '{key}' must be {expected_type.__name__}, "
+                    f"got {type(val).__name__}"
+                )
+
+    for key in ("allowed_types", "allowed_scopes"):
+        if key in config and isinstance(config.get(key), list):
+            for i, item in enumerate(config[key]):
+                if not isinstance(item, str):
+                    errors.append(
+                        f"config key '{key}[{i}]' must be a string, "
+                        f"got {type(item).__name__}"
+                    )
+
+    desc_key = "min_description_length"
+    if desc_key in config and isinstance(config.get(desc_key), int):
+        if config[desc_key] < 0:
+            errors.append(f"config key '{desc_key}' must be non-negative")
+
+    if errors:
+        raise ValueError("\n".join(errors))
+
 
 def load_config(repo_root: Path) -> dict:
-    config_path = repo_root / CONFIG_FILENAME
-    if config_path.is_file():
-        with open(config_path) as f:
-            user_config = json.load(f)
+    for name in CONFIG_FILENAMES:
+        config_path = repo_root / name
+        if not config_path.is_file():
+            continue
+        try:
+            if name.endswith(".json"):
+                with open(config_path) as f:
+                    user_config = json.load(f)
+            elif HAS_YAML:
+                with open(config_path) as f:
+                    user_config = _yaml.safe_load(f)
+            else:
+                print(
+                    f"Warning: found {name} but PyYAML is not available, skipping",
+                    file=sys.stderr,
+                )
+                continue
+            if not isinstance(user_config, dict):
+                print(
+                    f"Warning: {name} does not contain a valid config object, using defaults",
+                    file=sys.stderr,
+                )
+                continue
+        except (json.JSONDecodeError, ValueError) as exc:
+            print(f"Warning: failed to parse {name}: {exc}, using defaults", file=sys.stderr)
+            continue
+
         config = dict(DEFAULT_CONFIG)
         config.update(user_config)
+        try:
+            validate_config_schema(config)
+        except ValueError as exc:
+            print(f"Error: invalid config in {name}\n{exc}", file=sys.stderr)
+            sys.exit(1)
         return config
+
     return dict(DEFAULT_CONFIG)
 
 
@@ -135,7 +208,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Validate conventional commit messages."
     )
-    parser.add_argument("commit_msg_file", help="Path to the commit message file")
+    parser.add_argument(
+        "commit_msg_file",
+        nargs="?",
+        help="Path to the commit message file",
+    )
+    parser.add_argument(
+        "--pr-mode",
+        type=str,
+        default=None,
+        help="Validate a PR title/description string instead of reading a file",
+    )
     parser.add_argument(
         "--config",
         default=None,
@@ -143,28 +226,60 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    commit_msg_file = Path(args.commit_msg_file)
+    if bool(args.pr_mode) == bool(args.commit_msg_file):
+        parser.error("provide either --pr-mode <string> or a commit_msg_file, not both")
 
     if args.config:
         config_path = Path(args.config)
         if config_path.is_file():
-            with open(config_path) as f:
-                config = dict(DEFAULT_CONFIG)
-                config.update(json.load(f))
+            try:
+                if str(config_path).endswith(".json"):
+                    with open(config_path) as f:
+                        user_config = json.load(f)
+                elif HAS_YAML:
+                    with open(config_path) as f:
+                        user_config = _yaml.safe_load(f)
+                else:
+                    print(
+                        "Warning: specified config is YAML but PyYAML is not available, using defaults",
+                        file=sys.stderr,
+                    )
+                    user_config = {}
+                if not isinstance(user_config, dict):
+                    print(
+                        f"Warning: {config_path} does not contain a valid config, using defaults",
+                        file=sys.stderr,
+                    )
+                    user_config = {}
+            except (json.JSONDecodeError, ValueError) as exc:
+                print(f"Warning: failed to parse config: {exc}, using defaults", file=sys.stderr)
+                user_config = {}
+            config = dict(DEFAULT_CONFIG)
+            config.update(user_config)
+            try:
+                validate_config_schema(config)
+            except ValueError as exc:
+                print(f"Error: invalid config\n{exc}", file=sys.stderr)
+                return 1
         else:
-            print(f"Warning: config file '{args.config}' not found, using defaults",
-                  file=sys.stderr)
+            print(
+                f"Warning: config file '{args.config}' not found, using defaults",
+                file=sys.stderr,
+            )
             config = dict(DEFAULT_CONFIG)
     else:
         repo_root = Path(os.getcwd())
         config = load_config(repo_root)
 
-    try:
-        with open(commit_msg_file) as f:
-            message = f.read()
-    except OSError as exc:
-        print(f"Error reading commit message file: {exc}", file=sys.stderr)
-        return 1
+    if args.pr_mode:
+        message = args.pr_mode
+    else:
+        try:
+            with open(args.commit_msg_file) as f:
+                message = f.read()
+        except OSError as exc:
+            print(f"Error reading commit message file: {exc}", file=sys.stderr)
+            return 1
 
     error = validate(message, config)
     if error:

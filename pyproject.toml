@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "commit-enforcer"
+version = "0.1.0"
+description = "Conventional Commit message enforcer for pre-commit"
+requires-python = ">=3.8"
+
+[project.scripts]
+validate-commit-msg = "scripts.validate_commit_msg:main"
+
+[tool.setuptools.packages.find]
+include = ["scripts*"]
