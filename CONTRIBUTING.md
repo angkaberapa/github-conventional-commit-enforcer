@@ -44,7 +44,7 @@ added login
 - `perf` — performance improvement
 - `revert` — reverting a previous commit
 
-## Setup
+## Setup for contributors
 
 ### 1. Install pre-commit
 
@@ -84,6 +84,18 @@ Or use `--no-verify` to bypass the hook (intended for emergencies only):
 git commit --no-verify -m "your message"
 ```
 
+## Setup in a new repository
+
+In the target repository, run:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/angkaberapa/github-conventional-commit-enforcer/main/scripts/install.sh | bash
+```
+
+This downloads `validate_commit_msg.py`, creates `.commit-enforcer.json` and `.pre-commit-config.yaml`, and installs the hook.
+
+**Prerequisite:** Python 3 + `pre-commit` (`pip install pre-commit`).
+
 ## Per-repository customization
 
 To customize behavior, create a `.commit-enforcer.json` (or `.commit-enforcer.yaml`) file in the repository root.
@@ -117,12 +129,6 @@ If a config value has the wrong type (e.g. `"allowed_types": "feat"` instead of 
 Error: invalid config in .commit-enforcer.json
 config key 'allowed_types' must be list, got str
 ```
-
-### Setup in a new repository
-
-1. Copy the repository files to the target repository.
-2. (Optional) Create a `.commit-enforcer.json` with custom rules.
-3. Run `pre-commit install --hook-type commit-msg`.
 
 ## CI/CD usage
 
