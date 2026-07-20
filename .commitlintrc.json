@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "type-enum": [
+      2,
+      "always",
+      [
+        "feat",
+        "fix",
+        "docs",
+        "refactor",
+        "test",
+        "chore",
+        "ci",
+        "build",
+        "perf",
+        "revert"
+      ]
+    ],
+    "scope-enum": [
+      2,
+      "always",
+      [
+        "api",
+        "auth",
+        "db",
+        "email",
+        "worker",
+        "infra"
+      ]
+    ],
+    "scope-empty": [
+      2,
+      "never"
+    ],
+    "subject-min-length": [
+      2,
+      "always",
+      3
+    ]
+  },
+  "allow-breaking": true
+}

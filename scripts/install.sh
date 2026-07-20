@@ -13,15 +13,17 @@ curl -sL "$GITHUB/scripts/validate_commit_msg.py" -o scripts/validate_commit_msg
 chmod +x scripts/validate_commit_msg.py
 echo "  -> scripts/validate_commit_msg.py"
 
-if [ ! -f .commit-enforcer.json ]; then
-    echo "Creating .commit-enforcer.json..."
-    cat > .commit-enforcer.json <<'JSON'
+if [ ! -f .commitlintrc.json ]; then
+    echo "Creating .commitlintrc.json..."
+    cat > .commitlintrc.json <<'JSON'
 {
-  "allowed_types": ["feat", "fix", "docs", "refactor", "test", "chore", "ci", "build", "perf", "revert"],
-  "allowed_scopes": ["api", "auth", "db", "email", "worker", "infra"],
-  "scope_required": true,
-  "allow_breaking": true,
-  "min_description_length": 3
+  "rules": {
+    "type-enum": [2, "always", ["feat", "fix", "docs", "refactor", "test", "chore", "ci", "build", "perf", "revert"]],
+    "scope-enum": [2, "always", ["api", "auth", "db", "email", "worker", "infra"]],
+    "scope-empty": [2, "never"],
+    "subject-min-length": [2, "always", 3]
+  },
+  "allow-breaking": true
 }
 JSON
 fi

@@ -22,7 +22,25 @@ DEFAULT_CONFIG = {
     "min_description_length": 1,
 }
 
-CONFIG_FILENAMES = [".commit-enforcer.json", ".commit-enforcer.yaml", ".commit-enforcer.yml"]
+# Search order: commitlint format first, then legacy format
+CONFIG_FILENAMES = [
+    ".commitlintrc.json",
+    ".commitlintrc.yaml",
+    ".commitlintrc.yml",
+    ".commit-enforcer.json",
+    ".commit-enforcer.yaml",
+    ".commit-enforcer.yml",
+]
+
+# Well-known commitlint presets resolved at runtime (no npm needed)
+COMMITLINT_PRESETS = {
+    "@commitlint/config-conventional": {
+        "type-enum": [2, "always", [
+            "build", "chore", "ci", "docs", "feat",
+            "fix", "perf", "refactor", "revert", "style", "test",
+        ]],
+    },
+}
 
 COMMIT_PATTERN = re.compile(r"^(\w+)(\([\w.\-/ ]+\))?(!)?: (.+)$", re.UNICODE)
 
@@ -33,6 +51,67 @@ try:
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
+
+
+# ---------------------------------------------------------------------------
+# Config loading helpers
+# ---------------------------------------------------------------------------
+
+def _is_commitlint_config(raw: dict) -> bool:
+    return "rules" in raw
+
+
+def _parse_commitlint_rules(rules: dict) -> dict:
+    result = {}
+    if "type-enum" in rules:
+        _, _, types = rules["type-enum"]
+        result["allowed_types"] = types
+    if "scope-enum" in rules:
+        _, _, scopes = rules["scope-enum"]
+        result["allowed_scopes"] = scopes
+    if "scope-empty" in rules:
+        _, condition, *_ = rules["scope-empty"]
+        result["scope_required"] = condition == "never"
+    if "subject-min-length" in rules:
+        _, _, length = rules["subject-min-length"]
+        result["min_description_length"] = length
+    return result
+
+
+def _commitlint_to_internal(raw: dict) -> dict:
+    result = {}
+
+    rules = {}
+    for ext in raw.get("extends", []):
+        if ext in COMMITLINT_PRESETS:
+            rules.update(COMMITLINT_PRESETS[ext])
+
+    rules.update(raw.get("rules", {}))
+    result.update(_parse_commitlint_rules(rules))
+
+    if "allow-breaking" in raw:
+        result["allow_breaking"] = raw["allow-breaking"]
+
+    return result
+
+
+def _read_config_file(config_path: Path) -> dict | None:
+    try:
+        if config_path.suffix == ".json":
+            with open(config_path) as f:
+                return json.load(f)
+        elif HAS_YAML:
+            with open(config_path) as f:
+                return _yaml.safe_load(f)
+        else:
+            print(
+                f"Warning: found {config_path.name} but PyYAML is not available, skipping",
+                file=sys.stderr,
+            )
+            return None
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(f"Warning: failed to parse {config_path}: {exc}", file=sys.stderr)
+        return None
 
 
 def validate_config_schema(config: dict) -> None:
@@ -78,31 +157,17 @@ def load_config(repo_root: Path) -> dict:
         config_path = repo_root / name
         if not config_path.is_file():
             continue
-        try:
-            if name.endswith(".json"):
-                with open(config_path) as f:
-                    user_config = json.load(f)
-            elif HAS_YAML:
-                with open(config_path) as f:
-                    user_config = _yaml.safe_load(f)
-            else:
-                print(
-                    f"Warning: found {name} but PyYAML is not available, skipping",
-                    file=sys.stderr,
-                )
-                continue
-            if not isinstance(user_config, dict):
-                print(
-                    f"Warning: {name} does not contain a valid config object, using defaults",
-                    file=sys.stderr,
-                )
-                continue
-        except (json.JSONDecodeError, ValueError) as exc:
-            print(f"Warning: failed to parse {name}: {exc}, using defaults", file=sys.stderr)
+
+        raw = _read_config_file(config_path)
+        if raw is None or not isinstance(raw, dict):
             continue
 
         config = dict(DEFAULT_CONFIG)
-        config.update(user_config)
+        if _is_commitlint_config(raw):
+            config.update(_commitlint_to_internal(raw))
+        else:
+            config.update(raw)
+
         try:
             validate_config_schema(config)
         except ValueError as exc:
@@ -222,7 +287,10 @@ def main() -> int:
     parser.add_argument(
         "--config",
         default=None,
-        help="Path to config file (default: look for .commit-enforcer.json in repo root)",
+        help=(
+            "Path to config file (default: look for .commitlintrc.json "
+            "or .commit-enforcer.json in repo root)"
+        ),
     )
     args = parser.parse_args()
 
@@ -232,30 +300,14 @@ def main() -> int:
     if args.config:
         config_path = Path(args.config)
         if config_path.is_file():
-            try:
-                if str(config_path).endswith(".json"):
-                    with open(config_path) as f:
-                        user_config = json.load(f)
-                elif HAS_YAML:
-                    with open(config_path) as f:
-                        user_config = _yaml.safe_load(f)
-                else:
-                    print(
-                        "Warning: specified config is YAML but PyYAML is not available, using defaults",
-                        file=sys.stderr,
-                    )
-                    user_config = {}
-                if not isinstance(user_config, dict):
-                    print(
-                        f"Warning: {config_path} does not contain a valid config, using defaults",
-                        file=sys.stderr,
-                    )
-                    user_config = {}
-            except (json.JSONDecodeError, ValueError) as exc:
-                print(f"Warning: failed to parse config: {exc}, using defaults", file=sys.stderr)
-                user_config = {}
+            raw = _read_config_file(config_path)
+            if raw is None or not isinstance(raw, dict):
+                raw = {}
             config = dict(DEFAULT_CONFIG)
-            config.update(user_config)
+            if _is_commitlint_config(raw):
+                config.update(_commitlint_to_internal(raw))
+            else:
+                config.update(raw)
             try:
                 validate_config_schema(config)
             except ValueError as exc:
